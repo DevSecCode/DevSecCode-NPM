@@ -1,0 +1,71 @@
+name: Bug report
+description: Something the scanner does (or fails to do) doesn't match the docs.
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. The more specific you
+        can be, the faster we can fix it.
+
+  - type: input
+    id: version
+    attributes:
+      label: Scanner version
+      description: "Output of `devseccode --version` (or `dsc --version`)."
+      placeholder: "e.g. 0.4.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS Apple Silicon (darwin-arm64)
+        - Linux x64
+        - Linux arm64
+        - Windows x64
+        - Other (please specify in the description)
+    validations:
+      required: true
+
+  - type: input
+    id: install-method
+    attributes:
+      label: How did you install it?
+      placeholder: "npx, npm install -g, npm install --save-dev, etc."
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      render: shell
+      placeholder: "devseccode scan . --format sarif --output out.sarif"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+      description: Paste any error message or unexpected output. For false positives/negatives, include the smallest code snippet that reproduces — please scrub any real secrets.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Logs, screenshots, links to a repo demonstrating the issue, etc.

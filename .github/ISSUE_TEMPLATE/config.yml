@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & discussion
+    url: https://github.com/DevSecCode/DevSecCode-NPM/discussions
+    about: For usage questions, ideas, and show-and-tell. Issues are for confirmed bugs and feature requests.
+  - name: Security disclosure
+    url: https://github.com/DevSecCode/DevSecCode-NPM/security/advisories/new
+    about: Report a vulnerability privately. Please do NOT open a public issue for security bugs.
+  - name: DevSecCode IDE
+    url: https://devseccode.com
+    about: Compliance mapping, SBOM + CVE enrichment, signed evidence packages, POA&M, git-history credential scanning, and remediation workflows.

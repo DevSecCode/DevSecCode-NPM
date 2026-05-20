@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a new capability, output format, language, or rule.
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening: check whether the feature already exists in the
+        DevSecCode IDE (https://devseccode.com) — the npm scanner is
+        intentionally a focused subset. We may still ship it here if it
+        makes the local CLI substantially more useful.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the use case?
+      description: What are you trying to do that the scanner doesn't currently support? Concrete examples help more than abstractions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would the ideal solution look like?
+      description: A new command, a new flag, a new output format, a new rule, a new language target — anything goes. If you have a specific UX in mind, sketch it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Tools, workarounds, or related issues you found.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?

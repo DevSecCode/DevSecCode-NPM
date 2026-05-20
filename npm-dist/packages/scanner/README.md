@@ -1,95 +1,126 @@
 # @devseccode/scanner
 
-Gamified local security CLI for hunting common code vulnerabilities from npm.
-It ships as a prebuilt single-file binary, so users do not need Python,
-OpenGrep, or a DevSecCode IDE install to get started.
+> Gamified local SAST. Find SQL injection, hardcoded secrets, XSS, and
+> other CWE classics — no SaaS, no Python toolchain, no CI gate required.
+
+## Try it now
+
+```bash
+npx @devseccode/scanner hunt .
+```
+
+No install, no signup, no config. The scanner downloads a prebuilt
+~18 MB binary for your platform and runs locally. Your source code never
+leaves your machine.
+
+## What it does
+
+- **9 high-precision CWE rule families** — SQL injection, XSS, command
+  injection, path traversal, hardcoded secrets, broken crypto, cleartext
+  HTTP, XXE, and CSRF — across Python, JavaScript / TypeScript, Go,
+  Java, and Rust.
+- **Infrastructure scanning** for Dockerfiles and Kubernetes manifests.
+- **Gamified TUI** (`hunt`) — a scan map, encounter cards, and a triage
+  flow designed to be run more than once.
+- **Standard outputs** — SARIF (for GitHub Code Scanning), JUnit (for
+  CI test runners), JSON (for downstream tooling), and a colorized
+  terminal report.
+- **Zero runtime dependencies** — a single PyInstaller binary per
+  platform. No Python install required, no network calls at runtime.
 
 ## Install
 
-No npm login is required for the public package.
-
 ```bash
-# One-shot security hunt:
+# One-shot:
 npx @devseccode/scanner hunt .
 
-# Global install:
+# Global:
 npm install -g @devseccode/scanner
-devseccode hunt .
+devseccode --help                # or `dsc` for short
 
-# Project-local install, recommended for CI:
+# Project-local (recommended for CI):
 npm install --save-dev @devseccode/scanner
 npx devseccode scan . --format sarif --output devseccode.sarif
 ```
 
-## Supported platforms
-
-The parent package declares one `optionalDependencies` entry per platform.
-`npm` installs only the package that matches your machine; the rest are
-skipped by the `os` / `cpu` fields.
-
-| Target          | Package                                |
-| --------------- | -------------------------------------- |
-| macOS Apple Si  | `@devseccode/scanner-darwin-arm64`         |
-| Linux x86_64    | `@devseccode/scanner-linux-x64`            |
-| Linux arm64     | `@devseccode/scanner-linux-arm64`          |
-| Windows x86_64  | `@devseccode/scanner-win32-x64`            |
-
-Intel Mac (`darwin-x64`) is not built for this release. Alpine / musl Linux is
-not supported; use a glibc image such as Debian or Ubuntu in CI.
-
-## Quick Start
+## Common commands
 
 ```bash
-# Start the gamified path:
-devseccode hunt .
-
-# See the public quest map:
-devseccode quests
-
-# Emit SARIF for GitHub Code Scanning:
-devseccode scan . --format sarif --output devseccode.sarif
-
-# Emit JSON for local tooling:
-devseccode scan . --format json --output devseccode-findings.json
-
-# List the public rule subset:
-devseccode list-rules
-
-# Explain a rule:
-devseccode explain deva.cwe-89.python-sql-injection
-
-# Initialize a .dsc.yml file:
-devseccode init
+devseccode hunt .                                       # gamified scan
+devseccode scan . --format sarif --output out.sarif     # CI-friendly
+devseccode scan . --format json --output out.json       # tooling-friendly
+devseccode list-rules                                   # public ruleset
+devseccode explain deva.cwe-89.python-sql-injection     # rule details
+devseccode init                                         # drop a .dsc.yml
 ```
 
-`devseccode --help` lists every public subcommand; `devseccode <subcommand>
---help` documents the flags for each one. `dsc` remains available as a short
-alias for existing users and scripts.
+## GitHub Actions
 
-## What's Included
+```yaml
+# .github/workflows/security.yml
+name: Security scan
+on: [push, pull_request]
 
-This public CLI intentionally includes a focused subset of DevSecCode's local
-scanner:
+permissions:
+  contents: read
+  security-events: write
 
-- A `hunt` command with Shield Score, rank, and next-quest guidance
-- High-signal SAST rules for common web, secrets, crypto, XML, and
-  infrastructure risks
-- Terminal, JSON, SARIF, and JUnit output
-- Configurable fail thresholds for CI
-- Local-only execution with no telemetry or code upload
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx @devseccode/scanner scan . --format sarif --output results.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: results.sarif
+```
 
-The full DevSecCode IDE adds the complete rule library, compliance mapping,
-SBOM and dependency intelligence, git-history analysis, signed evidence
-packages, OSCAL/POA&M outputs, and guided remediation workflows.
+The SARIF output lights up GitHub's native **Security** tab.
+
+## Supported platforms
+
+The parent package declares one `optionalDependencies` entry per
+platform. `npm` installs only the package that matches your machine; the
+rest are skipped by the `os` / `cpu` fields.
+
+| Target                                | Package                                 |
+| ------------------------------------- | --------------------------------------- |
+| macOS Apple Silicon (`darwin-arm64`)  | `@devseccode/scanner-darwin-arm64`      |
+| Linux x64                             | `@devseccode/scanner-linux-x64`         |
+| Linux arm64                           | `@devseccode/scanner-linux-arm64`       |
+| Windows x64                           | `@devseccode/scanner-win32-x64`         |
+
+Intel Mac (`darwin-x64`) is not built in this release — GitHub retired
+the macos-13 runner pool. Alpine / musl Linux is not supported; run
+from a Debian or Ubuntu sidecar in CI.
 
 ## Privacy
 
-`devseccode hunt` and `devseccode scan` are fully local. No code, telemetry,
-or analytics leaves your machine.
+`devseccode hunt` and `devseccode scan` are fully local. No code,
+telemetry, or analytics leaves your machine.
+
+## The DevSecCode IDE
+
+This package is intentionally focused — a curated rule subset and basic
+outputs, free and frictionless to install. The full **DevSecCode IDE**
+adds the complete rule library, compliance mapping (NIST 800-53,
+HIPAA, FedRAMP, SOC 2, ISO 27001, PCI DSS, and more), SBOM and
+dependency CVE enrichment, audit-grade signed evidence packages,
+POA&M generation, git-history credential scanning, and guided
+remediation workflows.
+
+→ [devseccode.com](https://devseccode.com)
+
+## Repository
+
+Source, issue tracker, and changelog:
+[github.com/DevSecCode/DevSecCode-NPM](https://github.com/DevSecCode/DevSecCode-NPM)
 
 ## License
 
-Proprietary -- All Rights Reserved. Installing or using this package means
-you accept the DevSecCode End User License Agreement in [LICENSE](./LICENSE).
-Redistribution, modification, reverse engineering, and use to build a
-competing product are not permitted.
+Proprietary — All Rights Reserved. Installing or using this package
+means you accept the DevSecCode End User License Agreement in
+[LICENSE](./LICENSE). Redistribution, modification, reverse
+engineering, and use to build a competing product are not permitted.
