@@ -1,0 +1,69 @@
+DevSecCode CLI - End User License Agreement
+
+Copyright (c) DevSecCode, Inc. All rights reserved.
+
+This End User License Agreement ("Agreement") is a binding contract
+between you ("Customer") and DevSecCode, Inc., a Delaware corporation
+("DevSecCode"), covering the DevSecCode CLI software, including the
+@devseccode/cli npm package, every platform-specific subpackage, all
+bundled binaries, rulepacks, compliance data, and accompanying
+materials (collectively, the "Software"). By installing or using the
+Software, you agree to this Agreement. If you do not agree, do not
+install or use the Software.
+
+1. LICENSE GRANT. Subject to your compliance with this Agreement,
+DevSecCode grants you a non-exclusive, non-transferable, non-
+sublicensable, revocable license to install and use the Software for
+your internal business purposes during the access period granted to
+you by DevSecCode.
+
+2. RESTRICTIONS. You may not, and may not allow any third party to:
+   (a) copy, redistribute, resell, rent, lease, host, or sublicense
+       the Software;
+   (b) modify, adapt, or create derivative works of the Software;
+   (c) reverse engineer, decompile, or disassemble the Software,
+       except to the extent this restriction is prohibited by
+       applicable law;
+   (d) remove or alter any copyright, trademark, or proprietary
+       notice;
+   (e) use the Software to design, develop, or improve a competing
+       product;
+   (f) share npm registry access tokens or account credentials with
+       anyone outside your organization;
+   (g) use the Software for any unlawful purpose.
+
+3. OWNERSHIP. The Software is licensed, not sold. DevSecCode retains
+all right, title, and interest in and to the Software, including all
+intellectual property rights. No rights are granted other than those
+expressly stated in this Agreement.
+
+4. NO WARRANTY. THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE",
+WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WITHOUT
+LIMITATION WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, NON-INFRINGEMENT, OR THAT THE SOFTWARE WILL IDENTIFY EVERY
+SECURITY VULNERABILITY OR COMPLIANCE GAP. SCANNER OUTPUTS ARE
+INFORMATIONAL AND DO NOT CONSTITUTE LEGAL, REGULATORY, OR PROFESSIONAL
+ADVICE.
+
+5. LIMITATION OF LIABILITY. TO THE MAXIMUM EXTENT PERMITTED BY LAW,
+DEVSECCODE WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS,
+REVENUE, DATA, OR BUSINESS, ARISING FROM OR RELATING TO THIS
+AGREEMENT OR THE SOFTWARE, EVEN IF DEVSECCODE WAS ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGES. DEVSECCODE'S TOTAL CUMULATIVE LIABILITY
+ARISING FROM OR RELATING TO THIS AGREEMENT WILL NOT EXCEED THE
+GREATER OF (a) THE FEES YOU PAID DEVSECCODE FOR THE SOFTWARE IN THE
+TWELVE (12) MONTHS BEFORE THE CLAIM, OR (b) ONE HUNDRED U.S. DOLLARS
+(US $100).
+
+6. TERMINATION. This Agreement automatically terminates if you breach
+any term. DevSecCode may also terminate your access at any time by
+revoking your npm registry permissions. Upon termination you must
+stop using the Software, uninstall it, and destroy all copies.
+Sections 2 through 5 and 7 survive termination.
+
+7. GOVERNING LAW. This Agreement is governed by the laws of the State
+of Delaware, USA, without regard to its conflict-of-laws rules. Any
+dispute arising under this Agreement shall be brought exclusively in
+the state or federal courts located in Delaware, and the parties
+consent to the personal jurisdiction of those courts.

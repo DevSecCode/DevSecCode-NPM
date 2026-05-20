@@ -1,0 +1,25 @@
+{
+  "name": "@devseccode/scanner-linux-arm64",
+  "version": "0.4.3",
+  "description": "Prebuilt public dsc CLI binary for linux-arm64 (glibc). Installed automatically by @devseccode/scanner on ARM64 Linux.",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "DevSecCode",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DevSecCode/DevSecCode-NPM.git",
+    "directory": "npm-dist/packages/scanner-linux-arm64"
+  },
+  "homepage": "https://github.com/DevSecCode/DevSecCode-NPM#readme",
+  "files": [
+    "bin/"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

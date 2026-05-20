@@ -1,0 +1,4 @@
+# OpenGrep binary is downloaded by setup.sh; do not commit
+bin/opengrep
+bin/*.cert
+bin/*.sig

@@ -1,0 +1,11 @@
+# PyInstaller build output -- regenerated per release in CI.
+build/
+
+# Artifacts dropped by the assemble step. We commit the .gitkeep files
+# so the empty dirs exist, but the actual binaries are produced fresh
+# in CI and should not be tracked.
+packages/cli-*/bin/dsc
+packages/cli-*/bin/dsc.exe
+
+# npm pack output
+*.tgz

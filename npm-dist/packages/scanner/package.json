@@ -1,0 +1,50 @@
+{
+  "name": "@devseccode/scanner",
+  "version": "0.4.3",
+  "description": "Gamified local security CLI for hunting common code vulnerabilities from npm.",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "DevSecCode",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DevSecCode/DevSecCode-NPM.git",
+    "directory": "npm-dist/packages/scanner"
+  },
+  "bugs": {
+    "url": "https://github.com/DevSecCode/DevSecCode-NPM/issues"
+  },
+  "homepage": "https://github.com/DevSecCode/DevSecCode-NPM#readme",
+  "keywords": [
+    "security",
+    "sast",
+    "scanner",
+    "owasp",
+    "cwe",
+    "sarif",
+    "cli",
+    "gamified",
+    "vulnerability-hunting",
+    "devseccode",
+    "deva"
+  ],
+  "bin": {
+    "devseccode": "bin/dsc.js",
+    "dsc": "bin/dsc.js"
+  },
+  "files": [
+    "bin/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@devseccode/scanner-darwin-arm64": "0.4.3",
+    "@devseccode/scanner-linux-x64": "0.4.3",
+    "@devseccode/scanner-linux-arm64": "0.4.3",
+    "@devseccode/scanner-win32-x64": "0.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

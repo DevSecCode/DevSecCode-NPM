@@ -1,0 +1,25 @@
+{
+  "name": "@devseccode/scanner-win32-x64",
+  "version": "0.4.3",
+  "description": "Prebuilt public dsc CLI binary for win32-x64. Installed automatically by @devseccode/scanner on 64-bit Windows.",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": "DevSecCode",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DevSecCode/DevSecCode-NPM.git",
+    "directory": "npm-dist/packages/scanner-win32-x64"
+  },
+  "homepage": "https://github.com/DevSecCode/DevSecCode-NPM#readme",
+  "files": [
+    "bin/"
+  ],
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

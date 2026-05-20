@@ -1,0 +1,43 @@
+# ---- Python / engine build outputs ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# PyInstaller intermediate + final outputs (committed binary lives
+# under npm-dist/packages/scanner-<target>/bin/ when assembled).
+engine/build/
+engine/dist/
+npm-dist/build/
+
+# ---- Node / npm ----
+node_modules/
+*.tgz
+# Root-level package files only appear when smoke-testing the published
+# scanner via `npm install @devseccode/scanner` at the repo root. Not source.
+/package.json
+/package-lock.json
+
+# ---- Scanner runtime outputs ----
+# This repo distributes the CLI; it isn't itself a project being scanned.
+# `devseccode init` drops a .dsc.yml at the repo root during local dev/
+# testing — ignored here. Downstream users of @devseccode/scanner should
+# still commit their own .dsc.yml in their own repos (recommended).
+.dsc.yml
+.dsc_cache/
+# Workspace-scoped IDE state. Not consumed by the npm CLI.
+.devseccode/
+
+# ---- OS / editor cruft ----
+.DS_Store
+.idea/
+.vscode/
+*.swp
