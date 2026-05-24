@@ -50,6 +50,8 @@ from dsc.gamification.layout import CARD_H, CARD_W, Canvas, NodeInfo, NodeMap, l
 from dsc.gamification.triage import TriageStore, save_triage
 from dsc.scanner.models import Finding, Severity
 
+import json as _json
+
 
 _SEV_PTK_STYLE = {
     Severity.CRITICAL: "bold ansired",
@@ -76,6 +78,9 @@ class _MapState:
     targets: list[Path]
     import_graph: ImportGraph
     triage: TriageStore
+    cursor_glyph: str = "◉"
+    xp_into_level: int = 0
+    player_level: int = 0
     extra_files: list[str] = field(default_factory=list)
     node_map: NodeMap = field(default=None)  # type: ignore[assignment]
     canvas: Canvas = field(default=None)     # type: ignore[assignment]
@@ -148,7 +153,7 @@ def _render_canvas_with_cursor(state: _MapState) -> FormattedText:
                 # Cursor glyph: replace the leftmost padding cell of the
                 # middle row with the Deva orb so it reads as "you are here".
                 if y == selected.y + 2 and x == selected.x + 1:
-                    ch = "◉"
+                    ch = state.cursor_glyph
             fragments.append((_rich_to_ptk_style(style), ch))
         fragments.append(("", "\n"))
     return FormattedText(fragments)
@@ -165,8 +170,10 @@ def _rich_to_ptk_style(rich_style: str) -> str:
         return ""
     s = rich_style.strip()
     # Direct passthroughs that prompt_toolkit understands.
-    if s in ("", "bold", "italic", "reverse", "dim", "underline"):
+    if s in ("", "bold", "italic", "reverse", "underline"):
         return s
+    if s == "dim":
+        return "fg:ansibrightblack"
     # Compound 'reverse <color>' — preserve reverse and translate color.
     if s.startswith("reverse "):
         return "reverse " + _color_to_ptk(s[len("reverse "):])
@@ -208,10 +215,18 @@ def _color_to_ptk(rich_color: str) -> str:
 
 # --- status bar -------------------------------------------------------
 
+def _xp_bar(xp_into: int, width: int = 10) -> str:
+    filled = int((xp_into / 100) * width)
+    return "█" * filled + "░" * (width - filled)
+
+
 def _status_bar_text(state: _MapState) -> FormattedText:
     parts: list[tuple[str, str]] = []
-    parts.append((_ACCENT_PTK + " bold", " Deva "))
-    parts.append(("", " "))
+    # Character + level + XP bar
+    parts.append((_ACCENT_PTK + " bold", f" {state.cursor_glyph} "))
+    parts.append(("bold", f"Lvl {state.player_level} "))
+    parts.append(("fg:ansibrightyellow", _xp_bar(state.xp_into_level)))
+    parts.append((_DIM_PTK, f" {state.xp_into_level}/100  "))
     node = state.selected_node
     if node:
         rel = _relative_path(node.file_path, state.targets)
@@ -223,7 +238,7 @@ def _status_bar_text(state: _MapState) -> FormattedText:
     if state.flash:
         parts.append((state.flash_style or _ACCENT_PTK, " " + state.flash + " "))
         parts.append(("", "\n"))
-    parts.append((_DIM_PTK, " ←↑→↓ move   enter inspect   q finish   ? help "))
+    parts.append((_DIM_PTK, " ←↑→↓ move   enter inspect   s save report   q finish   ? help "))
     return FormattedText(parts)
 
 
@@ -236,6 +251,9 @@ def _help_text() -> FormattedText:
         ("", "\n"),
         ("", "  Enter "),
         (_DIM_PTK, "inspect findings for the focused file"),
+        ("", "\n"),
+        ("", "  s     "),
+        (_DIM_PTK, "save findings report to devseccode-report.json"),
         ("", "\n"),
         ("", "  q     "),
         (_DIM_PTK, "finish the hunt → summary card"),
@@ -420,6 +438,7 @@ def run_map_session(
     import_graph: ImportGraph,
     triage: TriageStore,
     extra_files: Iterable[str] | None = None,
+    hunter_class: str | None = None,
 ) -> None:
     """Run the full-screen hunt-map TUI until the player quits.
 
@@ -430,13 +449,20 @@ def run_map_session(
     so the player can navigate the rest of the codebase (and see the
     import edges between findings and clean files).
     """
+    from dsc.gamification.characters import get_character
+    from dsc.gamification.profile import load_profile as _load_profile
     findings = list(findings)
     targets = list(targets)
+    char = get_character(hunter_class)
+    _prof = _load_profile()
     state = _MapState(
         findings=findings,
         targets=targets,
         import_graph=import_graph,
         triage=triage,
+        cursor_glyph=char.glyph,
+        xp_into_level=_prof.xp_into_level,
+        player_level=_prof.level,
         extra_files=list(extra_files or []),
     )
 
@@ -498,6 +524,31 @@ def run_map_session(
     @kb.add("c-c")
     def _(event):
         event.app.exit()
+
+    @kb.add("s", filter=_map_focused)
+    def _(_e):
+        """Save findings as a JSON report to the current directory."""
+        try:
+            report_data = []
+            for f in state.findings:
+                report_data.append({
+                    "file": f.file_path,
+                    "line": f.line_start,
+                    "rule_id": f.rule_id,
+                    "cwe": f.cwe,
+                    "severity": f.severity.name,
+                    "message": f.message or "",
+                    "snippet": f.snippet or "",
+                    "fix": f.fix_suggestion or "",
+                })
+            from pathlib import Path as _P
+            out = _P.cwd() / "devseccode-report.json"
+            out.write_text(_json.dumps(report_data, indent=2), encoding="utf-8")
+            state.flash = f"Saved {len(report_data)} findings to devseccode-report.json"
+            state.flash_style = "fg:ansibrightgreen bold"
+        except OSError as exc:
+            state.flash = f"Save failed: {exc}"
+            state.flash_style = "fg:ansired bold"
 
     @kb.add("?", filter=_map_focused)
     @kb.add("h", filter=_map_focused)

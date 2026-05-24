@@ -32,7 +32,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from dsc.gamification.deva import ACCENT_COLOR, CATCHPHRASE, GLOW_COLOR, deva_portrait
+from dsc.gamification.characters import get_character
+from dsc.gamification.deva import ACCENT_COLOR, CATCHPHRASE, GLOW_COLOR, active_portrait, deva_portrait
 from dsc.gamification.profile import Profile
 from dsc.version import __version__
 
@@ -200,17 +201,21 @@ def render_quests_panel() -> Panel:
 
 
 def render_stats_panel(profile: Profile) -> RenderableType:
-    """Hunter profile panel — Deva portrait + level/XP/achievement stats.
+    """Hunter profile panel — character portrait + level/XP/achievement stats.
 
     Achievements appear as a sibling panel when any are unlocked, so the
     main panel stays uncluttered for newer players.
     """
+    char = get_character(profile.hunter_class)
+    portrait_text, portrait_color = active_portrait(profile.hunter_class)
+
     table = Table.grid(padding=(0, 2))
     table.add_column(style="dim", no_wrap=True)
     table.add_column(no_wrap=True)
 
-    table.add_row("Watcher", Text("Deva", style=f"bold {ACCENT_COLOR}"))
-    table.add_row("Catchphrase", Text(f"\"{CATCHPHRASE}\"", style="italic"))
+    table.add_row("Hunter", Text(f"{char.glyph} {char.name}", style=f"bold {char.accent_color}"))
+    table.add_row("Title", Text(char.title, style=f"italic {char.accent_color}"))
+    table.add_row("Catchphrase", Text(f"\"{char.catchphrase}\"", style="italic"))
     table.add_row(
         "Level",
         Text(f"{profile.level}  ({profile.xp_into_level}/100 XP)", style="bold"),
@@ -219,15 +224,41 @@ def render_stats_panel(profile: Profile) -> RenderableType:
     table.add_row("Hunts completed", str(profile.hunts_completed))
     table.add_row("Unique rules triggered", str(len(profile.unique_rules)))
     table.add_row("Achievements", str(len(profile.achievements)))
+
+    # Streak.
+    streak_val = getattr(profile, "current_streak", 0)
+    longest_val = getattr(profile, "longest_streak", 0)
+    streak_text = Text()
+    streak_text.append(str(streak_val), style="bold bright_yellow" if streak_val >= 7 else "bold")
+    if longest_val > 0:
+        streak_text.append(f"  (best: {longest_val})", style="dim")
+    table.add_row("Streak", streak_text)
+
+    # Difficulty.
+    diff = getattr(profile, "difficulty", "normal")
+    diff_style = {"easy": "green", "hard": "bold red"}.get(diff, "dim")
+    table.add_row("Difficulty", Text(diff.upper(), style=diff_style))
+
+    # Active title (loot).
+    active = getattr(profile, "active_title", None)
+    loot_list = getattr(profile, "loot", [])
+    if active:
+        from dsc.gamification.profile import get_loot_info
+        info = get_loot_info(active)
+        title_display = info[0] if info else active
+        table.add_row("Title", Text(title_display, style="bold bright_cyan"))
+    if loot_list:
+        table.add_row("Loot collected", str(len(loot_list)))
+
     table.add_row("Profile created", profile.created_at or "—")
     table.add_row("Last hunt", profile.last_hunt_at or "—")
 
-    portrait = Text(deva_portrait(), style=ACCENT_COLOR)
+    portrait = Text(portrait_text, style=portrait_color)
     main_panel = Panel(
         Columns([portrait, table], equal=False, expand=False, padding=(0, 4)),
-        title=Text("HUNTER PROFILE", style=f"bold {ACCENT_COLOR}"),
+        title=Text("HUNTER PROFILE", style=f"bold {char.accent_color}"),
         title_align="left",
-        border_style=ACCENT_COLOR,
+        border_style=char.accent_color,
         padding=(1, 2),
     )
 
@@ -327,6 +358,7 @@ def render_ide_panel() -> Panel:
         ("Git-history scanning", "find credentials buried in past commits"),
         ("SBOM + OSV enrichment", "CycloneDX / SPDX, dependency CVEs"),
         ("Guided remediation", "AI-assisted fixes inside your editor"),
+        ("Pentesting toolkit", "offensive security workflows, exploit validation, attack surface mapping"),
     ]
     for title, desc in items:
         body.append("  • ", style=ACCENT_COLOR)
@@ -372,3 +404,154 @@ def show_ci_mode() -> None:
 
 def show_ide() -> None:
     show_overlay("DEVSECCODE IDE", render_ide_panel())
+
+
+def render_last_report_panel() -> Panel:
+    """Render the stored last-hunt report as a Rich panel."""
+    from dsc.gamification.report_store import load_report
+
+    report = load_report()
+    if report is None:
+        body = Text("No report saved yet. Run a hunt first!", style="yellow")
+        return Panel(
+            body,
+            title=Text("LAST REPORT", style="bold yellow"),
+            title_align="left",
+            border_style="yellow",
+            padding=(1, 2),
+        )
+
+    body = Text()
+    # Header
+    if report.gate_passed:
+        body.append("QUEST COMPLETE  ", style="bold white on green")
+    else:
+        body.append("QUEST FAILED  ", style="bold white on red")
+    body.append(f"  {report.total_findings} encounters", style="bold")
+    body.append(f"\n\nTimestamp:  ", style="dim")
+    body.append(report.timestamp, style="bold")
+    body.append(f"\nTargets:   ", style="dim")
+    body.append(", ".join(report.targets) or "—", style="bold")
+    body.append(f"\nFiles:     ", style="dim")
+    body.append(str(report.files_scanned), style="bold")
+    body.append(f"\nDuration:  ", style="dim")
+    body.append(f"{report.duration_ms / 1000.0:.2f}s", style="bold")
+
+    # Shield score
+    stars = {"S": "*****", "A": "**** ", "B": "***  ", "C": "**   ", "D": "*    "}.get(report.shield_rank, "*")
+    body.append(f"\n\nSHIELD     ", style="dim")
+    body.append(stars, style="bold bright_yellow")
+    body.append(f"  {report.shield_score}/100", style="bold")
+    body.append(f"  Rank {report.shield_rank}", style=f"bold {ACCENT_COLOR}")
+
+    # Severity breakdown
+    if report.findings_by_severity:
+        body.append("\n\nSEVERITY BREAKDOWN\n", style="bold dim")
+        sev_colors = {"CRITICAL": "bold red", "HIGH": "red", "MEDIUM": "yellow", "LOW": "blue", "INFO": "dim"}
+        for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
+            count = report.findings_by_severity.get(sev, 0)
+            if count:
+                body.append(f"  {sev:<10}", style=sev_colors.get(sev, ""))
+                body.append(f" {count}\n", style="bold")
+
+    # XP
+    body.append(f"\nXP Earned: ", style="dim")
+    body.append(f"+{report.xp_earned}", style="bold bright_yellow")
+    body.append(f"  Level: ", style="dim")
+    body.append(str(report.level_after), style="bold")
+
+    # Achievements
+    if report.new_achievements:
+        body.append("\n\nNEW ACHIEVEMENTS\n", style="bold bright_yellow")
+        from dsc.gamification.achievements import get_achievement
+        for key in report.new_achievements:
+            ach = get_achievement(key)
+            if ach:
+                body.append(f"  {ach.glyph} {ach.title}", style="bold")
+                body.append(f" — {ach.description}\n", style="dim")
+
+    # Finding details summary (first 10)
+    if report.finding_details:
+        body.append(f"\nFINDINGS ({report.total_findings} total)\n", style="bold dim")
+        for i, det in enumerate(report.finding_details[:15]):
+            sev_style = {"CRITICAL": "bold red", "HIGH": "red", "MEDIUM": "yellow", "LOW": "blue"}.get(det.get("severity", ""), "dim")
+            body.append(f"  {det.get('severity', ''):>8}", style=sev_style)
+            body.append(f"  {det.get('file', '')}:{det.get('line', '')}", style="bold")
+            body.append(f"  {det.get('rule_id', '')}\n", style="dim")
+        if len(report.finding_details) > 15:
+            body.append(f"  ... and {len(report.finding_details) - 15} more\n", style="dim")
+
+    body.append("\n\nTip: ", style="dim")
+    body.append("Use 'Save Report' from the menu to export as JSON.", style="italic dim")
+
+    return Panel(
+        body,
+        title=Text("LAST HUNT REPORT", style=f"bold {ACCENT_COLOR}"),
+        title_align="left",
+        border_style=ACCENT_COLOR,
+        padding=(1, 2),
+    )
+
+
+def show_last_report() -> None:
+    show_overlay("LAST REPORT", render_last_report_panel())
+
+
+def render_leaderboard_panel(profile: Profile) -> Panel:
+    """Personal best shield scores per target."""
+    from pathlib import Path as _P
+
+    body = Text()
+    if not profile.best_scores:
+        body.append("No scores recorded yet. Run a hunt to set your first record!", style="yellow")
+        return Panel(
+            body,
+            title=Text("LEADERBOARD", style=f"bold {ACCENT_COLOR}"),
+            title_align="left",
+            border_style=ACCENT_COLOR,
+            padding=(1, 2),
+        )
+
+    body.append("PERSONAL BEST SCORES\n\n", style="bold dim")
+
+    # Sort by score descending.
+    sorted_scores = sorted(profile.best_scores.items(), key=lambda kv: -kv[1])
+    for i, (target, score) in enumerate(sorted_scores, start=1):
+        # Letter rank.
+        if score >= 95: rank = "S"
+        elif score >= 85: rank = "A"
+        elif score >= 70: rank = "B"
+        elif score >= 50: rank = "C"
+        else: rank = "D"
+
+        rank_style = {"S": "bold bright_yellow", "A": "bold green", "B": "yellow", "C": "red", "D": "bold red"}.get(rank, "")
+
+        # Shorten the path for display.
+        try:
+            display = str(_P(target).name) or target
+        except Exception:
+            display = target
+
+        medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, "  ")
+        body.append(f"  {medal} ", style="")
+        body.append(f"{score:>3}/100", style="bold")
+        body.append(f"  Rank ", style="dim")
+        body.append(rank, style=rank_style)
+        body.append(f"  {display}\n", style="bold")
+
+    # Summary stats.
+    body.append(f"\n  Targets scored: {len(profile.best_scores)}", style="dim")
+    body.append(f"  ·  Longest streak: {profile.longest_streak}d", style="dim")
+    body.append(f"  ·  Current streak: {profile.current_streak}d", style="dim")
+
+    return Panel(
+        body,
+        title=Text("LEADERBOARD", style=f"bold {ACCENT_COLOR}"),
+        title_align="left",
+        border_style=ACCENT_COLOR,
+        padding=(1, 2),
+    )
+
+
+def show_leaderboard(profile: Profile) -> None:
+    show_overlay("LEADERBOARD", render_leaderboard_panel(profile))

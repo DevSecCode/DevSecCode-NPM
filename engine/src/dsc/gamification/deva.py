@@ -101,3 +101,24 @@ def deva_line(template: str, **kwargs) -> str:
     if kwargs:
         template = template.format(**kwargs)
     return f"Deva: {template}"
+
+
+def active_portrait(hunter_class: str | None) -> tuple[str, str]:
+    """Return (portrait_text, accent_color) for the active character.
+
+    If hunter_class is set, returns the pixel-art character sprite.
+    Otherwise falls back to Deva's orb.
+    """
+    if hunter_class:
+        from dsc.gamification.characters import get_character
+        char = get_character(hunter_class)
+        return char.portrait, char.accent_color
+    return deva_portrait(), ACCENT_COLOR
+
+
+def active_name(hunter_class: str | None) -> str:
+    """Return the display name for the active character."""
+    if hunter_class:
+        from dsc.gamification.characters import get_character
+        return get_character(hunter_class).name
+    return "Deva"
