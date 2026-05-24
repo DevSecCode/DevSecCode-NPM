@@ -35,6 +35,92 @@ from dsc.gamification.profile import (
 )
 
 
+def _patch_questionary_list_highlight():
+    """Patch questionary so list-based Choice titles get highlight styling.
+
+    Stock questionary just does tokens.extend(choice.title) for list titles,
+    ignoring whether the item is pointed at. We patch the inner append()
+    so pointed-at list titles get 'class:highlighted' on the title part
+    and keep the dim style on the description part.
+    """
+    import types
+    from questionary.prompts.common import InquirerControl, Choice, Separator
+
+    if getattr(InquirerControl, "_dsc_patched", False):
+        return
+
+    def _patched_get_choice_tokens(self):
+        tokens = []
+
+        INDICATOR_SELECTED = "\u25cf"
+        INDICATOR_UNSELECTED = "\u25cb"
+
+        for index, choice in enumerate(self.filtered_choices):
+            selected = choice.value in self.selected_options
+
+            if index == self.pointed_at:
+                if self.pointer is not None:
+                    tokens.append(("class:pointer", " {} ".format(self.pointer)))
+                else:
+                    tokens.append(("class:text", " " * 3))
+                tokens.append(("[SetCursorPosition]", ""))
+            else:
+                pointer_length = len(self.pointer) if self.pointer is not None else 1
+                tokens.append(("class:text", " " * (2 + pointer_length)))
+
+            if isinstance(choice, Separator):
+                tokens.append(("class:separator", "{}".format(choice.title)))
+            elif choice.disabled:
+                if isinstance(choice.title, list):
+                    tokens.append(("class:selected" if selected else "class:disabled", "- "))
+                    tokens.extend(choice.title)
+                else:
+                    tokens.append(("class:selected" if selected else "class:disabled", "- {}".format(choice.title)))
+                tokens.append(("class:selected" if selected else "class:disabled",
+                    "" if isinstance(choice.disabled, bool) else " ({})".format(choice.disabled)))
+            else:
+                shortcut = choice.get_shortcut_title() if self.use_shortcuts else ""
+                if selected:
+                    indicator = (INDICATOR_SELECTED + " ") if self.use_indicator else ""
+                    tokens.append(("class:selected", "{}".format(indicator)))
+                else:
+                    indicator = (INDICATOR_UNSELECTED + " ") if self.use_indicator else ""
+                    tokens.append(("class:text", "{}".format(indicator)))
+
+                if isinstance(choice.title, list):
+                    is_pointed = index == self.pointed_at
+                    for token_style, token_text in choice.title:
+                        if is_pointed:
+                            if "#555" in token_style:
+                                # Descriptions stay dim
+                                tokens.append((token_style, token_text))
+                            elif "fg:" in token_style and "ansiwhite" not in token_style:
+                                # Colored glyphs keep their color, add underline
+                                tokens.append((token_style + " underline", token_text))
+                            else:
+                                # Title text gets generic highlight
+                                tokens.append(("class:highlighted", token_text))
+                        else:
+                            tokens.append((token_style, token_text))
+                elif selected:
+                    tokens.append(("class:selected", "{}{}".format(shortcut, choice.title)))
+                elif index == self.pointed_at:
+                    tokens.append(("class:highlighted", "{}{}".format(shortcut, choice.title)))
+                else:
+                    tokens.append(("class:text", "{}{}".format(shortcut, choice.title)))
+
+            tokens.append(("", "\n"))
+
+        current = self.get_pointed_at()
+        if current and current.description:
+            tokens.append(("class:text", "  {} ".format(current.description)))
+        tokens.append(("", " "))
+        return tokens
+
+    InquirerControl._get_choice_tokens = _patched_get_choice_tokens
+    InquirerControl._dsc_patched = True  # type: ignore[attr-defined]
+
+
 def _err_console() -> Console:
     return Console(file=sys.stderr, highlight=False)
 
@@ -113,26 +199,33 @@ def _action_profile_menu(questionary, profile: Profile) -> Profile:
     char = get_character(profile.hunter_class)
     loot_count = len(profile.loot)
 
+    def _sc(text: str) -> str:
+        _MAP = str.maketrans(
+            "abcdefghijklmnopqrstuvwxyz",
+            "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ",
+        )
+        return text.lower().translate(_MAP)
+
     menu_style = questionary.Style([
         ("qmark", "fg:#9b8cff bold"),
-        ("question", "bold"),
+        ("question", "fg:#9b8cff bold"),
         ("pointer", "fg:#9b8cff bold"),
         ("highlighted", "fg:#9b8cff bold underline"),
         ("selected", "fg:#9b8cff bold"),
-        ("separator", "fg:#555555"),
+        ("separator", "fg:#444444"),
         ("answer", "fg:#9b8cff bold"),
     ])
 
     pick = questionary.select(
         f"{char.glyph}  {char.name} · Lvl {profile.level}",
         choices=[
-            questionary.Choice(title=f"  ★  Hunter Stats", value="stats"),
-            questionary.Choice(title=f"  {char.glyph}  Change Hunter", value="character"),
-            questionary.Choice(title=f"  ⚙  Difficulty · {profile.difficulty.upper()}", value="difficulty"),
-            questionary.Choice(title=f"  ◆  Loot · {loot_count} title{'s' if loot_count != 1 else ''}", value="loot"),
-            questionary.Choice(title=f"  ▲  Leaderboard", value="leaderboard"),
-            questionary.Separator("  ────────────────────────────────"),
-            questionary.Choice(title=f"  ←  Back", value="back"),
+            questionary.Choice(title=[("fg:ansiyellow bold", "  ★ "), ("fg:ansiwhite bold", " Hunter Stats  "), ("fg:#555555", _sc("View your profile"))], value="stats"),
+            questionary.Choice(title=[("fg:ansimagenta bold", f"  {char.glyph} "), ("fg:ansiwhite bold", " Change Hunter "), ("fg:#555555", _sc("Pick a new class"))], value="character"),
+            questionary.Choice(title=[("fg:ansicyan bold", "  ⚙ "), ("fg:ansiwhite bold", f" Difficulty     "), ("fg:#555555", _sc(profile.difficulty.upper()))], value="difficulty"),
+            questionary.Choice(title=[("fg:ansiblue bold", "  ◆ "), ("fg:ansiwhite bold", f" Loot           "), ("fg:#555555", _sc(f"{loot_count} title{'s' if loot_count != 1 else ''}"))], value="loot"),
+            questionary.Choice(title=[("fg:ansigreen bold", "  ▲ "), ("fg:ansiwhite bold", " Leaderboard   "), ("fg:#555555", _sc("Personal best scores"))], value="leaderboard"),
+            questionary.Separator("  ──────────────────────────────────────"),
+            questionary.Choice(title=[("fg:ansiwhite", "  ← "), ("fg:ansiwhite", " Back")], value="back"),
         ],
         qmark="◆",
         use_arrow_keys=True,
@@ -159,22 +252,49 @@ def _action_profile_menu(questionary, profile: Profile) -> Profile:
 
 def _action_change_character(questionary, profile: Profile) -> int:
     """Let the player pick a new pixel-art character."""
+    import time
+    from rich.live import Live
+    from rich.panel import Panel
+
     characters = all_characters()
     current = get_character(profile.hunter_class)
 
+    def _sc(text: str) -> str:
+        _MAP = str.maketrans(
+            "abcdefghijklmnopqrstuvwxyz",
+            "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ",
+        )
+        return text.lower().translate(_MAP)
+
     choices = []
     for ch in characters:
-        marker = " (current)" if ch.key == current.key else ""
+        marker = " ᴄᴜʀʀᴇɴᴛ" if ch.key == current.key else ""
+        pt_color = "ansi" + ch.accent_color.replace("_", "")
         choices.append(questionary.Choice(
-            title=f"  {ch.glyph}  {ch.name} — {ch.title}{marker}",
+            title=[
+                (f"fg:{pt_color} bold", f"  {ch.glyph} "),
+                ("fg:ansiwhite bold", f" {ch.name} "),
+                ("fg:#555555", f"— {_sc(ch.title)}{marker}"),
+            ],
             value=ch.key,
         ))
+
+    menu_style = questionary.Style([
+        ("qmark", "fg:#9b8cff bold"),
+        ("question", "fg:#9b8cff bold"),
+        ("pointer", "fg:#9b8cff bold"),
+        ("highlighted", "fg:#9b8cff bold underline"),
+        ("selected", "fg:#9b8cff bold"),
+        ("separator", "fg:#444444"),
+        ("answer", "fg:#9b8cff bold"),
+    ])
 
     pick = questionary.select(
         "Choose your hunter:",
         choices=choices,
-        qmark=">",
+        qmark="◆",
         use_arrow_keys=True,
+        style=menu_style,
     ).ask()
     if pick is None:
         return 0
@@ -182,7 +302,33 @@ def _action_change_character(questionary, profile: Profile) -> int:
     set_hunter_class(profile, pick)
     chosen = get_character(pick)
     console = _err_console()
-    console.print(Text(f"\n  {chosen.glyph}  Now playing as {chosen.name}\n", style=f"bold {chosen.accent_color}"))
+
+    # Portrait reveal animation.
+    if sys.stderr.isatty():
+        portrait_lines = chosen.portrait.split("\n")
+        mid = len(portrait_lines) // 2
+        try:
+            with Live(console=console, refresh_per_second=30, transient=True) as live:
+                for radius in range(1, mid + 2):
+                    start = max(0, mid - radius)
+                    end = min(len(portrait_lines), mid + radius)
+                    visible = portrait_lines[start:end]
+                    pad_top = [""] * start
+                    pad_bot = [""] * (len(portrait_lines) - end)
+                    body = Text("\n".join(pad_top + visible + pad_bot),
+                                style=f"bold {chosen.accent_color}")
+                    live.update(Panel(body, border_style=chosen.accent_color,
+                                      padding=(1, 2),
+                                      title=Text(f"  {chosen.glyph} {chosen.name} — {chosen.title}",
+                                                 style=f"bold {chosen.accent_color}"),
+                                      title_align="left"))
+                    time.sleep(0.06)
+                time.sleep(0.5)
+        except Exception:
+            pass
+
+    console.print(Text(f"\n  {chosen.glyph}  Now playing as {chosen.name}\n",
+                       style=f"bold {chosen.accent_color}"))
     return 0
 
 
@@ -384,6 +530,8 @@ def run_play_menu(
         _print_non_interactive_help()
         return 0
 
+    _patch_questionary_list_highlight()
+
     _first_cycle = True
     while True:
         # Each cycle starts clean: clear, redraw banner with fresh stats,
@@ -403,8 +551,19 @@ def run_play_menu(
             _err_console().print(intro)
 
         char = get_character(profile.hunter_class)
-        streak_label = f"  streak: {profile.current_streak}d" if profile.current_streak > 1 else ""
         loot_count = len(profile.loot)
+
+        # Status indicators bar.
+        console = _err_console()
+        status = Text()
+        status.append(f"  ● Lvl {profile.level}", style=f"bold {char.accent_color}")
+        status.append(f"  ⚡ {profile.hunts_completed} hunts", style="bold")
+        if profile.current_streak > 1:
+            status.append(f"  🔥 {profile.current_streak}d streak", style="bold bright_yellow")
+        if loot_count:
+            status.append(f"  ◆ {loot_count} loot", style="bold bright_cyan")
+        status.append("\n")
+        console.print(status)
 
         menu_style = questionary.Style([
             ("qmark", "fg:#9b8cff bold"),
@@ -412,23 +571,31 @@ def run_play_menu(
             ("pointer", "fg:#9b8cff bold"),
             ("highlighted", "fg:#9b8cff bold underline"),
             ("selected", "fg:#9b8cff bold"),
-            ("separator", "fg:#555555"),
+            ("separator", "fg:#444444"),
             ("answer", "fg:#9b8cff bold"),
         ])
+
+        # Unicode small caps for descriptions — visually smaller font.
+        def _sc(text: str) -> str:
+            _MAP = str.maketrans(
+                "abcdefghijklmnopqrstuvwxyz",
+                "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ",
+            )
+            return text.lower().translate(_MAP)
 
         choice = questionary.select(
             "What would you like to do?",
             choices=[
-                questionary.Separator("  ─── HUNT ───────────────────────"),
-                questionary.Choice(title=f"  ⚔  Start Hunt", value="hunt"),
-                questionary.Choice(title=f"  ◉  Watch Mode", value="watch"),
-                questionary.Choice(title=f"  ◈  Quest Map", value="quests"),
-                questionary.Separator("  ────────────────────────────────"),
-                questionary.Choice(title=f"  {char.glyph}  My Profile", value="profile"),
-                questionary.Separator("  ────────────────────────────────"),
-                questionary.Choice(title=f"  ◇  Last Report", value="report"),
-                questionary.Choice(title=f"  ▸  DevSecCode IDE", value="ide"),
-                questionary.Choice(title=f"  ✕  Exit", value="exit"),
+                questionary.Separator("  ─── ᴀᴄᴛɪᴏɴꜱ ─────────────────────────"),
+                questionary.Choice(title=[("fg:ansired bold", "  ⚔ "), ("fg:ansiwhite bold", " Start Hunt  "), ("fg:#555555", _sc("Scan for vulnerabilities"))], value="hunt"),
+                questionary.Choice(title=[("fg:ansiyellow bold", "  ◉ "), ("fg:ansiwhite bold", " Watch Mode  "), ("fg:#555555", _sc("Live scanning on file changes"))], value="watch"),
+                questionary.Choice(title=[("fg:ansicyan bold", "  ◈ "), ("fg:ansiwhite bold", " Quest Map   "), ("fg:#555555", _sc("Campaign objectives"))], value="quests"),
+                questionary.Separator("  ─── ᴘʀᴏꜰɪʟᴇ ─────────────────────────"),
+                questionary.Choice(title=[("fg:ansimagenta bold", f"  {char.glyph} "), ("fg:ansiwhite bold", " My Profile  "), ("fg:#555555", _sc("Stats, loot, settings"))], value="profile"),
+                questionary.Separator("  ──────────────────────────────────────"),
+                questionary.Choice(title=[("fg:ansigreen bold", "  ◇ "), ("fg:ansiwhite bold", " Last Report "), ("fg:#555555", _sc("View previous hunt results"))], value="report"),
+                questionary.Choice(title=[("fg:ansiblue bold", "  ▸ "), ("fg:ansiwhite bold", " DevSecCode IDE "), ("fg:#555555", _sc("Unlock the full campaign"))], value="ide"),
+                questionary.Choice(title=[("fg:ansiwhite", "  ✕ "), ("fg:ansiwhite", " Exit")], value="exit"),
             ],
             qmark="◆",
             use_arrow_keys=True,

@@ -110,7 +110,31 @@ _SENTINEL_PORTRAIT = r"""
 
 # ── Character registry ──────────────────────────────────────────────
 
+_DEVA_PORTRAIT = r"""
+            · • • • ·
+        · • • • • • • • ·
+      • • • • • • • • • • •
+    · • • • • • • • • • • • ·
+    • • • • • • • • • • • • •
+    • • • • • • • • • • • • •
+    • • • • • • • • • • • • •
+    • • • • • • • • • • • • •
+    · • • • • • • • • • • • ·
+      • • • • • • • • • • •
+        · • • • • • • • ·
+            · • • • ·
+"""
+
 CHARACTERS: tuple[Character, ...] = (
+    Character(
+        key="deva",
+        name="Deva",
+        title="The Watcher",
+        catchphrase="I see what was hidden.",
+        portrait=_DEVA_PORTRAIT.strip("\n"),
+        accent_color="bright_magenta",
+        glyph="◉",
+    ),
     Character(
         key="knight",
         name="Knight",
