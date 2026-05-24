@@ -400,15 +400,35 @@ def cmd_hunt(args: argparse.Namespace) -> int:
     # Import lazily so `scan` / `list-rules` don't pay the Rich-init cost
     # when they're piped into other tools.
     from dsc.gamification import banner, encounter, explore, summary
-    from dsc.gamification.achievements import evaluate_achievements
+    from dsc.gamification.achievements import evaluate_achievements, get_achievement
+    from dsc.gamification.animations import (
+        render_achievement_unlock,
+        render_boss_encounter,
+        render_damage_number,
+        render_defeat,
+        render_defense_bars_fill,
+        render_encounter_intro,
+        render_level_up,
+        render_loot_drop,
+        render_scan_progress,
+        render_shield_countup,
+        render_streak_fire,
+        render_victory,
+        render_xp_gain,
+    )
+    from dsc.gamification.characters import get_character
     from dsc.gamification.imports import build_graph
-    from dsc.gamification.profile import load_profile, record_hunt, save_profile
+    from dsc.gamification.profile import DIFFICULTY_FAIL_ON, load_profile, record_hunt, save_profile
     from dsc.gamification.triage import load_triage
 
     profile = load_profile()
+    char = get_character(profile.hunter_class)
 
     def _before_scan(targets: list[Path]) -> None:
         banner.render_hunt_banner(targets, profile)
+        # Animated scan progress (TTY only).
+        if explore._is_interactive():
+            render_scan_progress(accent_color=char.accent_color)
 
     try:
         result, fail_sev, targets = _run_scan(
@@ -419,39 +439,132 @@ def cmd_hunt(args: argparse.Namespace) -> int:
         sys.stderr.write(str(exc) + "\n")
         return 2
 
-    interactive = explore._is_interactive() and not bool(getattr(args, "no_explore", False))
-    if interactive and result.findings:
-        from dsc.gamification import tui
-        from dsc.gamification.imports import walk_target_files
-        # Pull every source file in the scan target so the map shows the
-        # whole codebase, not just findings-bearing files. Cap at 80 so
-        # the canvas stays navigable (findings files are always kept).
-        files_with_findings = sorted({f.file_path for f in result.findings})
-        extra_files = _pick_extra_files(targets, findings=files_with_findings, cap=80)
-        all_nodes = sorted(set(files_with_findings) | set(extra_files))
-        import_graph = build_graph(all_nodes, target_roots=targets)
-        triage = load_triage()
-        tui.run_map_session(
-            result.findings,
-            targets,
-            import_graph=import_graph,
-            triage=triage,
-            extra_files=extra_files,
-        )
-    else:
+    # Override fail_on based on difficulty if not explicitly set.
+    if not args.fail_on and profile.difficulty in DIFFICULTY_FAIL_ON:
+        fail_sev = DIFFICULTY_FAIL_ON[profile.difficulty]
+
+    # Boss encounter animation for CRITICAL findings (TTY only).
+    _is_tty = explore._is_interactive()
+    if _is_tty and result.findings:
+        from dsc.gamification.encounter import _enemy_name
+        from dsc.gamification.categories import classify_finding
+        _SEVERITY_PENALTY = {Severity.CRITICAL: 25, Severity.HIGH: 12, Severity.MEDIUM: 5, Severity.LOW: 2, Severity.INFO: 0}
+        _SEV_COLOR = {Severity.CRITICAL: "bold red", Severity.HIGH: "red", Severity.MEDIUM: "yellow", Severity.LOW: "blue", Severity.INFO: "dim"}
+        for f in result.findings:
+            if f.severity == Severity.CRITICAL:
+                cat = classify_finding(f)
+                enemy = _enemy_name(f, cat)
+                render_boss_encounter(enemy, accent_color="bold red")
+                break  # Only one boss intro per hunt.
+
+    if _is_tty and result.findings:
+        # Animated encounter intros + damage numbers for each finding.
+        from dsc.gamification.encounter import _enemy_name
+        from dsc.gamification.categories import classify_finding as _classify
+        _SEV_PENALTY_MAP = {Severity.CRITICAL: 25, Severity.HIGH: 12, Severity.MEDIUM: 5, Severity.LOW: 2, Severity.INFO: 0}
+        _SEV_CLR = {Severity.CRITICAL: "bold red", Severity.HIGH: "red", Severity.MEDIUM: "yellow", Severity.LOW: "blue", Severity.INFO: "dim"}
+        for idx, f in enumerate(result.findings, 1):
+            cat = _classify(f)
+            enemy = _enemy_name(f, cat)
+            sev_clr = _SEV_CLR.get(f.severity, "white")
+            render_encounter_intro(
+                enemy, f.severity.name,
+                index=idx, total=len(result.findings),
+                severity_color=sev_clr,
+            )
+            penalty = _SEV_PENALTY_MAP.get(f.severity, 0)
+            if penalty > 0:
+                render_damage_number(penalty, f.severity.name, accent_color=sev_clr)
+        encounter.render_all_encounters(result.findings)
+    elif not _is_tty:
         encounter.render_all_encounters(result.findings)
 
     gate_passed = not any(f.severity >= fail_sev for f in result.findings)
+    target_key = str(targets[0]) if targets else None
     record = record_hunt(
         profile,
         result.findings,
         achievements_evaluator=evaluate_achievements,
+        target_key=target_key,
     )
     if not bool(getattr(args, "no_profile", False)):
         try:
             save_profile(profile)
         except OSError as exc:
             sys.stderr.write(f"(warning) couldn't persist hunter profile: {exc}\n")
+
+    # ── Pre-summary animations (TTY only) ──
+    if _is_tty:
+        # Victory / defeat splash.
+        if gate_passed:
+            render_victory(accent_color=char.accent_color)
+        elif result.findings:
+            render_defeat()
+
+        # Shield score count-up.
+        from dsc.gamification.summary import shield_score as _shield_score
+        _score, _letter, _stars = _shield_score(result.findings)
+        render_shield_countup(_score, _letter, _stars, accent_color=char.accent_color)
+
+        # Defense bars animated fill.
+        from dsc.gamification.categories import ALL_CATEGORIES as _ALL_CATS, classify_finding as _clf
+        _sev_pen = {Severity.CRITICAL: 25, Severity.HIGH: 12, Severity.MEDIUM: 5, Severity.LOW: 2, Severity.INFO: 0}
+        _defense_data = []
+        for cat in _ALL_CATS:
+            cat_findings = [f for f in result.findings if _clf(f).key == cat.key]
+            pen = sum(_sev_pen.get(f.severity, 0) for f in cat_findings)
+            pct = max(0, 100 - pen)
+            if pct >= 95:
+                clr = "bright_green"
+            elif pct >= 80:
+                clr = "green"
+            elif pct >= 60:
+                clr = "yellow"
+            elif pct >= 30:
+                clr = "red"
+            else:
+                clr = "bold red"
+            _defense_data.append((cat.label.upper(), pct, clr))
+        render_defense_bars_fill(_defense_data, accent_color=char.accent_color)
+
+        # XP gain ticker.
+        from dsc.gamification.profile import XP_PER_LEVEL
+        render_xp_gain(
+            xp_before=record.xp_after - record.xp_delta,
+            xp_after=record.xp_after,
+            xp_delta=record.xp_delta,
+            level_before=record.level_before,
+            level_after=record.level_after,
+            xp_per_level=XP_PER_LEVEL,
+            accent_color=char.accent_color,
+        )
+
+        # Streak fire animation (7+ days).
+        if record.streak >= 7:
+            render_streak_fire(record.streak, accent_color=char.accent_color)
+
+        # Level-up animation.
+        if record.level_up:
+            render_level_up(
+                old_level=record.level_before,
+                new_level=record.level_after,
+                accent_color=char.accent_color,
+            )
+
+        # Achievement unlock animations.
+        if record.new_achievements:
+            for ach_key in record.new_achievements:
+                ach = get_achievement(ach_key)
+                if ach:
+                    render_achievement_unlock(ach.title, ach.description, ach.glyph)
+
+        # Loot chest animation.
+        if record.new_loot:
+            from dsc.gamification.profile import get_loot_info
+            for loot_key in record.new_loot:
+                info = get_loot_info(loot_key)
+                if info:
+                    render_loot_drop(info[0], info[1], accent_color="bright_cyan")
 
     summary.render_summary(
         profile=profile,
@@ -461,6 +574,24 @@ def cmd_hunt(args: argparse.Namespace) -> int:
         duration_ms=result.scan_duration_ms,
         files_scanned=result.files_scanned,
     )
+
+    # Persist the report so View/Save Report can access it later.
+    try:
+        from dsc.gamification.report_store import build_report, save_report
+        stored = build_report(
+            findings=list(result.findings),
+            targets=targets,
+            files_scanned=result.files_scanned,
+            duration_ms=result.scan_duration_ms,
+            gate_passed=gate_passed,
+            xp_earned=record.xp_delta,
+            level_after=record.level_after,
+            new_achievements=record.new_achievements,
+            findings_by_category=record.findings_by_category,
+        )
+        save_report(stored)
+    except OSError:
+        pass  # Non-critical — don't break the hunt over report storage.
 
     return 0 if gate_passed else 1
 
@@ -555,6 +686,7 @@ def cmd_map(args: argparse.Namespace) -> int:
             import_graph=import_graph,
             triage=triage,
             extra_files=extra_files,
+            hunter_class=profile.hunter_class,
         )
     else:
         explore.render_map(result.findings, targets)
@@ -565,6 +697,38 @@ def cmd_map(args: argparse.Namespace) -> int:
 def cmd_play(_args: argparse.Namespace) -> int:
     """Explicit alias for the interactive play menu."""
     return _run_play_menu()
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    """Watch a target for file changes and auto-rescan."""
+    from dsc.gamification.profile import load_profile
+    from dsc.gamification.watch import run_watch
+
+    profile = load_profile()
+    target = args.path or "."
+
+    def _hunt_callback(t: str) -> int:
+        ns = argparse.Namespace(
+            path=t,
+            diff=False,
+            fail_on=None,
+            threads=4,
+            no_cache=True,   # Always fresh scan in watch mode.
+            scan_profile="balanced",
+            min_confidence=0.0,
+            include_suppressed=False,
+            ignore_patterns=None,
+            no_profile=getattr(args, "no_profile", False),
+            no_explore=True,  # Non-interactive in watch mode.
+        )
+        return cmd_hunt(ns)
+
+    return run_watch(
+        target,
+        run_hunt_fn=_hunt_callback,
+        poll_interval=int(getattr(args, "interval", 3)),
+        hunter_class=profile.hunter_class,
+    )
 
 
 def cmd_ide(_args: argparse.Namespace) -> int:
@@ -602,11 +766,16 @@ def _run_play_menu() -> int:
     def _ide_callback() -> int:
         return cmd_ide(argparse.Namespace())
 
+    def _watch_callback(target: str) -> int:
+        ns = argparse.Namespace(path=target, interval=3, no_profile=False)
+        return cmd_watch(ns)
+
     return run_play_menu(
         run_hunt=_hunt_callback,
         run_init=_init_callback,
         show_quests=_quests_callback,
         run_ide=_ide_callback,
+        run_watch=_watch_callback,
     )
 
 
@@ -720,6 +889,21 @@ def build_parser() -> argparse.ArgumentParser:
     ex = sub.add_parser("explain", help="Explain a public rule")
     ex.add_argument("rule_id")
     ex.set_defaults(func=cmd_explain)
+
+    watch = sub.add_parser("watch", help="Watch a target and auto-rescan on changes")
+    watch.add_argument("path", nargs="?", default=".")
+    watch.add_argument(
+        "--interval",
+        type=int,
+        default=3,
+        help="Poll interval in seconds (default: 3)",
+    )
+    watch.add_argument(
+        "--no-profile",
+        action="store_true",
+        help="Skip writing XP/achievements during watch scans",
+    )
+    watch.set_defaults(func=cmd_watch)
 
     ide = sub.add_parser("ide", help="Show what DevSecCode IDE adds")
     ide.set_defaults(func=cmd_ide)

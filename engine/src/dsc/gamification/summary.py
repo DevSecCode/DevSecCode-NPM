@@ -233,18 +233,47 @@ def render_summary(
     stats_row.append("  ·  ", style="dim")
     stats_row.append(f"{duration_ms/1000.0:.2f}s", style="dim")
 
+    # Difficulty badge.
+    diff_text = Text()
+    if record.difficulty != "normal":
+        diff_label = record.difficulty.upper()
+        diff_style = {"easy": "green", "hard": "bold red"}.get(record.difficulty, "dim")
+        diff_text.append(f"  [{diff_label} MODE]", style=diff_style)
+
     body = [
         header,
         _deva_outcome_line(gate_passed=gate_passed, total_findings=len(findings)),
         Text(""),
         score_row,
         stats_row,
+    ]
+
+    if diff_text.plain:
+        body.append(diff_text)
+
+    # New best score notification.
+    if record.new_best_score:
+        best = Text()
+        best.append("  ★ NEW PERSONAL BEST!", style="bold bright_yellow")
+        body.append(best)
+
+    body.extend([
         Text(""),
         Text("DEFENSE BREAKDOWN", style="bold dim"),
         _defense_table(findings),
         Text(""),
         _xp_section(record),
-    ]
+    ])
+
+    # Streak display.
+    if record.streak > 1:
+        streak_text = Text()
+        streak_text.append("STREAK    ", style="dim")
+        streak_fire = "🔥" if record.streak >= 7 else "·" * min(record.streak, 10)
+        streak_text.append(f"{record.streak} day{'s' if record.streak != 1 else ''}", style="bold bright_yellow")
+        if record.streak_bonus > 0:
+            streak_text.append(f"  +{record.streak_bonus} bonus XP", style="bright_yellow")
+        body.append(streak_text)
 
     if record.level_up:
         body.append(Text(f"Deva: {VOICE.level_up}", style="italic dim"))
@@ -252,6 +281,19 @@ def render_summary(
     achievements_rows = _achievements_block(record)
     if achievements_rows:
         body.extend(achievements_rows)
+
+    # Loot drops.
+    if record.new_loot:
+        from dsc.gamification.profile import get_loot_info
+        body.append(Text("\nLOOT DROP", style="bold bright_cyan"))
+        for loot_key in record.new_loot:
+            info = get_loot_info(loot_key)
+            if info:
+                name, desc = info
+                line = Text()
+                line.append(f"  ◆ {name}", style="bold bright_cyan")
+                line.append(f" — {desc}", style="dim")
+                body.append(line)
 
     body.extend([
         Text(""),
